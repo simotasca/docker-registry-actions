@@ -1,29 +1,27 @@
 # Docker Registry Actions
 
-Servizio che riavvia i container di una specifica docker compose quando le relative immagini vengono aggiornate sul loro registro
+Docker Registry Actions is a service that monitors Docker registry images and automatically restarts containers from a specified Docker Compose configuration when the images are updated.
 
-## Utilizzo
+## Usage
 
-Eseguire `docker-registry-actions -h` per vedere leconfigurazioni disponibili
+Run `docker-registry-actions -h` to see all available configuration options.
 
-## Installazione
+## Installation
 
 ### Ubuntu
 
-L'eseguibile compilato per funzionare su ubuntu è presente nella repository.
-
-per installarlo e configurarlo per essere eseguito come servizio systemd:
+To install Docker Registry Actions on Ubuntu and set it up as a `systemd` service, use the following command:
 
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/simotasca/docker-registry-actions/main/releases/linux/install.sh)
+bash <(curl -s https://raw.githubusercontent.com/simotasca/docker-registry-actions/master/releases/linux/install.sh)
 ```
 
-per disinstallare:
+To stop the service and uninstall the program:
 
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/simotasca/docker-registry-actions/main/releases/linux/uninstall.sh)
+bash <(curl -s https://raw.githubusercontent.com/simotasca/docker-registry-actions/master/releases/linux/uninstall.sh)
 ```
 
-### Compilare sorgenti
+### Building from Source
 
-Semplicemente `cargo build --release`
+Simply: `cargo build --release`
