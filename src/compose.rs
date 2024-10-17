@@ -1,4 +1,4 @@
-use crate::{cli::Config, prelude::*};
+use crate::{config::Config, prelude::*};
 use std::process::Stdio;
 use tokio::process::Command;
 

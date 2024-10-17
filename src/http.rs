@@ -1,4 +1,4 @@
-use crate::{cli::Config, prelude::*, compose};
+use crate::{config::Config, prelude::*, compose};
 use http_tokio::{utils::print_request, Request, Response, StatusCode};
 use serde::Deserialize;
 

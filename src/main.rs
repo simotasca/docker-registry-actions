@@ -1,10 +1,10 @@
-mod cli;
+mod config;
 mod compose;
 mod http;
 mod prelude;
 
 use crate::prelude::*;
-use cli::Config;
+use config::Config;
 use http::handle_connection;
 use http_tokio::utils::accept_connection;
 use tokio::{net::TcpListener, task};
