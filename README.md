@@ -13,13 +13,13 @@ Run `docker-registry-actions -h` to see all available configuration options.
 To install Docker Registry Actions on Ubuntu and set it up as a `systemd` service, use the following command:
 
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/simotasca/docker-registry-actions/master/releases/linux/install.sh)
+bash <(curl -s https://raw.githubusercontent.com/simotasca/docker-registry-actions/master/installers/linux/install.sh)
 ```
 
 To stop the service and uninstall the program:
 
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/simotasca/docker-registry-actions/master/releases/linux/uninstall.sh)
+bash <(curl -s https://raw.githubusercontent.com/simotasca/docker-registry-actions/master/installers/linux/uninstall.sh)
 ```
 
 ### Building from Source
