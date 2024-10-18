@@ -3,10 +3,14 @@
 # Variables
 BINARY_NAME="docker-registry-actions"
 SERVICE_NAME="docker-registry-actions"
+CONFIG_PATH=/etc/$SERVICE_NAME
 
 # Stop and disable the service
 sudo systemctl stop $SERVICE_NAME
 sudo systemctl disable $SERVICE_NAME
+
+# Remove the configuration file
+sudo rm -f $CONFIG_PATH
 
 # Remove the systemd service file
 sudo rm /etc/systemd/system/$SERVICE_NAME.service
