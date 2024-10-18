@@ -4,28 +4,36 @@
 BINARY_NAME="docker-registry-actions"
 GITHUB_URL="https://github.com/simotasca/docker-registry-actions/releases/$BINARY_NAME"
 SERVICE_NAME="docker-registry-actions"
-
-# Prompt user for arguments
-read -p "Enter path to compose file: " COMPOSE_PATH
-read -p "Enter service name list space separated (e.g., db backend website): " SERVICE_NAME_ARG
-read -p "Enter host (default: 0.0.0.0): " HOST
-HOST=${HOST:-0.0.0.0}
-read -p "Enter port (default: 4483): " PORT
-PORT=${PORT:-4483}
-read -p "Enter token secret: " TOKEN_SECRET
+CONFIG_PATH=/etc/$SERVICE_NAME
 
 # Download and install the binary
 sudo wget -O /usr/local/bin/$BINARY_NAME $GITHUB_URL
 sudo chmod +x /usr/local/bin/$BINARY_NAME
 
+# Create a basic configuration file
+sudo bash -c "cat <<EOT > $CONFIG_PATH
+server:
+  host: 0.0.0.0
+  port: 8080
+
+listeners:
+  # configure here your push listeners
+  # es.
+  # demo:
+  #   compose_path: /path/to/compose.yml
+  #   watch_services:
+  #     - service-name-1
+  #     - service-name-2
+EOT"
+
 # Create a systemd service file
 sudo bash -c "cat <<EOT > /etc/systemd/system/$SERVICE_NAME.service
 [Unit]
-Description=Riavvia servizi docker compose quando vengono aggiornate le immagini sul loro registro
+Description=A service that monitors Docker registry images and automatically restarts containers
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/$BINARY_NAME -c $COMPOSE_PATH $SERVICE_NAME_ARG --host $HOST --port $PORT -t $TOKEN_SECRET
+ExecStart=/usr/local/bin/$BINARY_NAME -c $CONFIG_PATH
 Restart=on-failure
 User=$(whoami)
 
