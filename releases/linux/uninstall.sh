@@ -10,7 +10,7 @@ sudo systemctl stop $SERVICE_NAME
 sudo systemctl disable $SERVICE_NAME
 
 # Remove the configuration file
-sudo rm -f $CONFIG_PATH
+sudo rm -rf $CONFIG_PATH
 
 # Remove the systemd service file
 sudo rm /etc/systemd/system/$SERVICE_NAME.service

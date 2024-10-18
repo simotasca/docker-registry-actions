@@ -2,19 +2,22 @@
 
 # Variables (Replace these with your details)
 BINARY_NAME="docker-registry-actions"
-GITHUB_URL="https://github.com/simotasca/docker-registry-actions/releases/$BINARY_NAME"
+BINARY_URL="https://github.com/simotasca/docker-registry-actions/releases/download/v0.2.0/docker-registry-actions"
 SERVICE_NAME="docker-registry-actions"
-CONFIG_PATH=/etc/$SERVICE_NAME
+CONFIG_DIR="/etc/$SERVICE_NAME"
+CONFIG_FILE="$CONFIG_DIR/config.yml"
+
 
 # Download and install the binary
-sudo wget -O /usr/local/bin/$BINARY_NAME $GITHUB_URL
+sudo wget -O /usr/local/bin/$BINARY_NAME $BINARY_URL
 sudo chmod +x /usr/local/bin/$BINARY_NAME
 
 # Create a basic configuration file
-sudo bash -c "cat <<EOT > $CONFIG_PATH
+sudo mkdir $CONFIG_DIR
+sudo bash -c "cat <<EOT > $CONFIG_FILE
 server:
   host: 0.0.0.0
-  port: 8080
+  port: 4463
 
 listeners:
   # configure here your push listeners
@@ -33,7 +36,7 @@ Description=A service that monitors Docker registry images and automatically res
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/$BINARY_NAME -c $CONFIG_PATH
+ExecStart=/usr/local/bin/$BINARY_NAME -c $CONFIG_FILE
 Restart=on-failure
 User=$(whoami)
 

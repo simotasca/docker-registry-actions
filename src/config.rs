@@ -7,12 +7,14 @@ use serde::{Deserialize, Deserializer};
 use std::{collections::HashMap, io::Read};
 use tokio::{fs::File, io::AsyncReadExt, sync::{OnceCell, SetError}};
 
+// TODO: for config path better use an env variable and set it in the .bashrc via installer 
+
 /// Docker Registry Actions
 #[derive(Parser)]
 #[command(about, long_about = None)]
 struct Cli {
     /// path to the yaml configuration file
-    #[arg(short,long="config",value_name="config_path",default_value="/etc/docker-registry-actions/config.yaml",required=false)]
+    #[arg(short,long="config",value_name="config_path",default_value="/etc/docker-registry-actions/config.yml",required=false)]
     config_path: String,
     /// test the configuration
     #[arg(short,long,value_name="test")]
