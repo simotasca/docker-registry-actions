@@ -1,0 +1,10 @@
+server:
+  host: 0.0.0.0
+  port: 8080
+  auth_token: TOKEN_SECRET
+  
+listeners:
+  demo:
+    compose_path: /home/simo/dev/prove/registry-listener/compose.demo.yml # required and must exist
+    watch_services:
+      - demo
