@@ -1,100 +1,131 @@
 use crate::prelude::*;
 use clap::Parser;
-use core::panic;
 use docker_compose_types::Compose;
-use serde::Deserialize;
-use serde_yaml::Deserializer;
-use std::{collections::HashMap, fs::read_to_string, path::Path};
-use tokio::sync::{OnceCell, SetError};
+use serde_yaml::Deserializer as YamlDeserializer;
+use core::panic;
+use serde::{Deserialize, Deserializer};
+use std::{collections::HashMap, io::Read};
+use tokio::{fs::File, io::AsyncReadExt, sync::{OnceCell, SetError}};
 
+/// Docker Registry Actions
 #[derive(Parser)]
 #[command(about, long_about = None)]
-/// Docker Registry Actions
 struct Cli {
-    /// The watched services
-    #[arg(required = true)]
-    services: Vec<String>,
-    /// Sets a custom compose file
-    #[arg(short,long="compose_file",value_name = "compose_file",default_value = "./compose.yml")]
-    compose_path: String,
-    /// http server host
-    #[arg(long,value_name = "http_host",default_value="127.0.0.1")]
-    host: String,
-    /// http server port
-    #[arg(short,long,value_name = "http_port",default_value="4483",value_parser=clap::value_parser!(u16).range(1024..))]
-    port: u16,
-    /// Custom authorization header.
-    /// The regitry must be configured to add it in a Authentication header set to "Bearer {token}"
-    #[arg(short,long,value_name = "auth_token")]
-    token: Option<String>
+    /// path to the yaml configuration file
+    #[arg(short,long="config",value_name="config_path",default_value="/etc/docker-registry-actions/config.yaml",required=false)]
+    config_path: String,
+    /// test the configuration
+    #[arg(short,long,value_name="test")]
+    test: bool,
 }
 
 static CONFIG: OnceCell<Config> = OnceCell::const_new();
 
+/// needs to be initialized once with Config::init()
+#[derive(Debug,Deserialize)]
 pub struct Config {
-    cli: Cli,
-    /// image to service mappings
-    itos: HashMap<String, String>,
-    /// parsed compose spec
-    pub compose: Compose,
-    pub compose_path: String,
-    pub compose_dir: String
+    #[serde(default="Server::default")]
+    pub server: Server,
+    pub listeners: HashMap<String, Listener>,
+    #[serde(skip_deserializing,default="bool::default")]
+    pub test_mode: bool
 }
 
 impl Config {
     pub fn global() -> &'static Self {
         CONFIG.get().expect("CLI configuration is not inizialized")
     }
-
-    pub fn init() {
-        if let Err(e) = CONFIG.set(Cli::parse().into()) {
+    
+    /// panics if there are errors in the configuration
+    pub async fn init() {
+        if let Err(e) = CONFIG.set(Self::from_cli(Cli::parse()).await) {
             match e {
                 SetError::AlreadyInitializedError(_) => panic!("config is already initialized"),
                 SetError::InitializingError(_) => panic!("concurrent inizialization of config occurred")
             }
         }
     }
-
-    pub fn server_address(&self) -> String { f!("{}:{}", self.cli.host, self.cli.port) }
-
-    pub fn access_token(&self) -> Option<String> { self.cli.token.to_owned() }
-
-    pub fn image_to_service(&self, service: &str) -> Option<String> {
-        self.itos.get(service).map(|s| s.to_string())
-    }
 }
 
-impl From<Cli> for Config {
-    fn from(cli: Cli) -> Self {
-        let compose = parse_compose(&cli.compose_path);
-        let compose_path = cli.compose_path.clone();
-        let compose_dir = Path::new(&compose_path).parent().unwrap().to_string_lossy().into_owned();
+#[derive(Debug,Deserialize)]
+pub struct Server {
+    #[serde(default="Server::default_host")]
+    pub host: String,
+    #[serde(default="Server::default_port")]
+    pub port: u16,
+    pub auth_token: Option<String>
+}
 
-        let mut itos: HashMap<String, String> = HashMap::new();
-        for service_name in cli.services.iter() {
-            match compose.services.0.get(service_name) {
-                Some(Some(service)) => match &service.image {
-                    Some(image) => itos.insert(image.into(), service_name.into()),
-                    None => panic!("service '{service_name}' has no 'image' attribute"),
-                },
-                _ => panic!("service '{service_name}' not found in compose"),
-            };
+
+impl Server {
+    pub fn address(&self) -> String { f!("{}:{}", self.host, self.port) }
+}
+
+#[derive(Debug,Deserialize)]
+pub struct Listener {
+    #[serde(rename="compose_path",deserialize_with="deserialize_compose_with_path")]
+    pub compose: ComposeWithPath,
+    pub watch_services: Vec<String>,
+    /// Image to service mappings
+    #[serde(skip_deserializing,default="HashMap::default")]
+    pub itos: HashMap<String, String>
+}
+
+#[derive(Debug)]
+pub struct ComposeWithPath {
+    pub path: String,
+    pub content: Compose,
+}
+
+impl Config {
+    async fn from_cli(cli: Cli) -> Self {
+        // per esser un vero rustafariano dovrei ritonare un error enum e printare da fuori...
+        let mut config_file = String::new();
+        File::open(&cli.config_path).await.expect("configuration file not found")
+            .read_to_string(&mut config_file).await.expect("failed to read configuration file");
+        let mut config = serde_yaml::from_str::<Self>(&config_file)
+            .unwrap_or_else(|err_msg| panic!("invalid configuration structure: {}", err_msg));
+        // validation
+        if config.server.port < 1024 { panic!("invalid configuration: invalid server port {}: cannot be less than 1024", config.server.port) }
+        // if config.listeners.len() == 0 { panic!("invalid configuration: listeners must contain at least one element") }
+        for (name, listener) in config.listeners.iter_mut() {
+            if listener.watch_services.is_empty() {
+                panic!("invalid configuration: listener '{}' should have at least one watch_services defined", name)
+            }
+            for service_name in listener.watch_services.iter() {
+                match listener.compose.content.services.0.get(service_name) {
+                    Some(Some(service)) => match &service.image {
+                        Some(image) => listener.itos.insert(image.into(), service_name.into()),
+                        None => panic!("invalid configuration: service '{service_name}' has no 'image' attribute in compose file '{}'", &listener.compose.path),
+                    },
+                    _ => panic!("invalid configuration: service '{service_name}' not found in compose file '{}'", &listener.compose.path),
+                };
+            }
         }
-
-        Self { cli, compose, compose_path, compose_dir, itos }
+        config.test_mode = cli.test;
+        config
     }
 }
 
-fn parse_compose(s: &str) -> Compose {
-    let path = Path::new(s);
-    let str_path = path.to_str().unwrap();
-    if !path.exists() {
-        panic!("compose file not found at {str_path}");
-    }
-    let content = match read_to_string(&path) {
-        Ok(content) => content,
-        Err(_) => panic!("failed to read the compose file {str_path}"),
-    };
-    Compose::deserialize(Deserializer::from_str(&content))
-        .expect(&f!("failed to parse the compose file {str_path}"))
+impl Server {
+    fn default() -> Self { serde_yaml::from_str::<Self>("").unwrap() }
+    fn default_host() -> String { String::from("0.0.0.0") }
+    fn default_port() -> u16 { 4463_u16 }
+}
+
+fn deserialize_compose_with_path<'de, D>(deserializer: D) -> std::result::Result<ComposeWithPath, D::Error> where D: Deserializer<'de> {
+    let path = String::deserialize(deserializer)?;
+    let content = read_compose_file(&path);
+    
+    Ok(ComposeWithPath { path, content })
+}
+
+fn read_compose_file(compose_path: &str) -> Compose {
+    let mut content = String::new();
+    std::fs::File::open(compose_path).expect(&f!("invalid configuration: compose file not found at {compose_path}"))
+        .read_to_string(&mut content)
+        .unwrap_or_else(|err_msg| panic!("failed to read the compose file {compose_path}: {}", err_msg));
+    // TODO: deserialize only when needed (eg: OnceCell)
+    Compose::deserialize(YamlDeserializer::from_str(&content))
+        .unwrap_or_else(|err_msg| panic!("failed to parse the compose file {compose_path}: {}", err_msg))
 }
