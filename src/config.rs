@@ -1,10 +1,10 @@
-use crate::prelude::*;
+use crate::{compose::ComposeCmd, prelude::*};
 use clap::Parser;
 use docker_compose_types::Compose;
 use serde_yaml::Deserializer as YamlDeserializer;
 use core::panic;
 use serde::{Deserialize, Deserializer};
-use std::{collections::HashMap, io::Read};
+use std::{collections::HashMap, io::Read, path::Path};
 use tokio::{fs::File, io::AsyncReadExt, sync::{OnceCell, SetError}};
 
 // TODO: for config path better use an env variable and set it in the .bashrc via installer 
@@ -29,6 +29,8 @@ pub struct Config {
     #[serde(default="Server::default")]
     pub server: Server,
     pub listeners: HashMap<String, Listener>,
+    #[serde(default="bool::default")]
+    pub remove_dangling: bool,
     #[serde(skip_deserializing,default="bool::default")]
     pub test_mode: bool
 }
@@ -118,16 +120,21 @@ impl Server {
 fn deserialize_compose_with_path<'de, D>(deserializer: D) -> std::result::Result<ComposeWithPath, D::Error> where D: Deserializer<'de> {
     let path = String::deserialize(deserializer)?;
     let content = read_compose_file(&path);
-    
     Ok(ComposeWithPath { path, content })
 }
 
 fn read_compose_file(compose_path: &str) -> Compose {
-    let mut content = String::new();
-    std::fs::File::open(compose_path).expect(&f!("invalid configuration: compose file not found at {compose_path}"))
-        .read_to_string(&mut content)
-        .unwrap_or_else(|err_msg| panic!("failed to read the compose file {compose_path}: {}", err_msg));
+    if !Path::new(compose_path).exists() {
+        panic!("invalid configuration: compose file not found at {compose_path}");
+    }
+    let content = ComposeCmd::new(compose_path).get_config().expect("invalid configuration: failed to load docker config");
+
+    // let mut content = String::new();
+    // std::fs::File::open(compose_path).expect(&f!("invalid configuration: compose file not found at {compose_path}"))
+    //     .read_to_string(&mut content)
+    //     .unwrap_or_else(|err_msg| panic!("failed to read the compose file {compose_path}: {}", err_msg));
+    
     // TODO: deserialize only when needed (eg: OnceCell)
     Compose::deserialize(YamlDeserializer::from_str(&content))
-        .unwrap_or_else(|err_msg| panic!("failed to parse the compose file {compose_path}: {}", err_msg))
+        .unwrap_or_else(|err_msg| panic!("failed to parse the compose configuration {compose_path}: {}", err_msg))
 }
