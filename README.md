@@ -6,6 +6,8 @@ Docker Registry Actions is a service that monitors Docker registry images and au
 
 Run `docker-registry-actions -h` to see all available configuration options.
 
+to get logs run: `sudo journalctl -f -u docker-registry-actions.service`
+
 ## Installation
 
 ### Ubuntu
