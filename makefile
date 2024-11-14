@@ -1,7 +1,7 @@
 .PHONY: *
 
 dev:
-	cargo run
+	cargo run -- -c ./config.demo.yml
 
 release:
 	cargo build --release

@@ -1,6 +1,6 @@
 # Docker Registry Actions
 
-Docker Registry Actions is a service that monitors Docker registry images and automatically restarts containers from a specified Docker Compose configuration when the images are updated.
+Docker Registry Actions is a service that monitors Docker registry images and automatically pulls and restarts containers from a specified Docker Compose configuration when the images are updated.
 
 ## Usage
 
