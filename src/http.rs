@@ -18,23 +18,31 @@ pub async fn handle_connection(req: Request, mut res: Response) {
     
 }
 
+type ComposePath = String;
+type ServiceName = String;
+
 async fn handle_registry_events(req: &Request) -> Result<()> {
-    // TODO: una immagine può essere trovata in più compose e in più servizi del medesimo compose
-    // fare quanto sotto per ogni compose configurato
-    // semplicemente spostare questa funzione in un for
     let body: RegistryWebhookRequest = serde_json::from_str(&req.body).trace()?;
-    // println!("{:#?}", body);
 
-
-    let mut updated_compose = HashMap::<String, Vec<String>>::new();
+    eprintln!("REQUEST {:?}", body);
+    
+    let mut updated_compose = HashMap::<ComposePath, Vec<ServiceName>>::new();
+    let mut possibly_dangling_images: Vec::<String> = vec![];
     for event in body.events.iter().filter(|e| e.action.eq("push")) {
         let pushed_image = f!("{}/{}", event.request.host, event.target.repository);
+        eprintln!("PUSHED IMAGE {}", pushed_image);
+        if Config::global().remove_dangling {
+            possibly_dangling_images.push(pushed_image.clone());
+        }
         for listener in Config::global().listeners.iter() {
             let listener = listener.1;
+            eprintln!("checking listener for compose: {}", listener.compose.path);
+            eprintln!("services listening: {:?}", listener.itos);
             let service = match listener.itos.get(&pushed_image) { 
                 Some(s) => s, 
                 None => continue
             };
+            eprintln!("FOUND SERVICE: {:?}", listener.watch_services);
             updated_compose
                 .entry((&listener.compose.path).into())
                 .or_insert(Vec::new())
@@ -45,11 +53,17 @@ async fn handle_registry_events(req: &Request) -> Result<()> {
 
     for (compose_path, services) in updated_compose.iter() {
         let docker_compose = ComposeCmd::new(compose_path);
-        println!("- detected services push: [{}] for compose {}", services.join(", "), compose_path);
+        println!("- detected services push: [{}] for compose '{}'", services.join(", "), compose_path);
         docker_compose.pull_services(&services).await.trace()?;
         println!("- services pulled");
         docker_compose.restart_services(&services).await.trace()?;
         println!("- services restarted");
+    }
+
+    if Config::global().remove_dangling {
+        for image in possibly_dangling_images {
+            ComposeCmd::clean_dangling(&image).await.trace()?;
+        }
     }
     
     Ok(())
