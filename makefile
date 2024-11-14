@@ -5,6 +5,8 @@ dev:
 
 release:
 	cargo build --release
+	rm -f installers/linux/docker-registry-actions
+	cp target/release/docker-registry-actions installers/linux
 
 install: release uninstall
 	sudo ln target/release/docker-registry-actions /usr/bin

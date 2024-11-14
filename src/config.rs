@@ -4,7 +4,7 @@ use docker_compose_types::Compose;
 use serde_yaml::Deserializer as YamlDeserializer;
 use core::panic;
 use serde::{Deserialize, Deserializer};
-use std::{collections::HashMap, io::Read, path::Path};
+use std::{collections::HashMap, path::Path};
 use tokio::{fs::File, io::AsyncReadExt, sync::{OnceCell, SetError}};
 
 // TODO: for config path better use an env variable and set it in the .bashrc via installer 

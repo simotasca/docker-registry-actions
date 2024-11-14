@@ -1,23 +1,54 @@
-use result::*;
-use std::{collections::HashMap, ffi::OsStr, future::Future, path::Path};
-use tokio::{fs::File, io::{AsyncBufReadExt, AsyncWriteExt, BufReader}, net::TcpStream};
-
 use crate::{content_type::ContentType, status_code::StatusCode};
+use std::result::Result as StdResult;
+use std::{collections::HashMap, ffi::OsStr, future::Future, path::Path};
+use thiserror::Error;
+use tokio::io::AsyncBufReadExt;
+use tokio::{
+    fs::File,
+    io::{AsyncWriteExt, BufReader},
+    net::TcpStream,
+};
+
+#[derive(Error, Debug)]
+pub enum ResponseError {
+    #[error("could not write to TcpStream")]
+    Write(#[from] tokio::io::Error),
+    #[error("could not flush to TcpStream")]
+    Flush(tokio::io::Error),
+    #[error("could not send response: {0}")]
+    Sendable(String),
+}
+
+impl ResponseError {
+    pub fn sendable<E>(error: E) -> Self
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        ResponseError::Sendable(format!("{error}"))
+    }
+}
+
+type Result<T> = StdResult<T, ResponseError>;
 
 pub struct Response {
     status: StatusCode,
     headers: HashMap<String, String>,
     stream: TcpStream,
-    sent: bool
+    sent: bool,
 }
 
 // constructor
 impl Response {
     pub fn new(stream: TcpStream) -> Response {
-        Self { status: StatusCode::Ok, headers: HashMap::new(), stream, sent: false }
+        Self {
+            status: StatusCode::Ok,
+            headers: HashMap::new(),
+            stream,
+            sent: false,
+        }
     }
 }
-  
+
 // public methods
 impl Response {
     pub fn set_header(&mut self, k: &str, v: &str) {
@@ -27,8 +58,8 @@ impl Response {
     /// Sends without body
     pub async fn try_send_empty(&mut self) -> Result<()> {
         self.headers.insert("Content-Length".to_owned(), 0.to_string());
-        self.write(self.fmt_head()).await.trace()?;
-        self.flush().await.trace()?;
+        self.write(self.fmt_head()).await?;
+        self.flush().await?;
         Ok(())
     }
 
@@ -48,9 +79,9 @@ impl Response {
         if !self.headers.contains_key("Content-Length") {
             self.headers.insert("Content-Length".to_owned(), body.content_length());
         }
-        self.write(self.fmt_head()).await.trace()?;
-        body.write(&mut self.stream).await.trace()?;
-        self.flush().await.trace()?;
+        self.write(self.fmt_head()).await?;
+        body.write(&mut self.stream).await?;
+        self.flush().await?;
         Ok(())
     }
 
@@ -63,21 +94,22 @@ impl Response {
     pub async fn send<T: Sendable>(&mut self, body: T) {
         self.send_or(body, |res| {
             let _ = res.status(StatusCode::InternalServerError).try_send("Internal server error");
-        }).await;
+        })
+        .await;
     }
 
-    /// Sets the content type 
+    /// Sets the content type
     pub fn content_type(&mut self, c_type: ContentType) -> &mut Self {
         self.raw_content_type(c_type.to_string().as_str());
         self
     }
-    
-    /// Sets the content type without enum 
+
+    /// Sets the content type without enum
     pub fn raw_content_type(&mut self, c_type: &str) -> &mut Self {
         self.headers.insert("Content-Type".to_owned(), c_type.to_owned());
         self
     }
-    
+
     /// Sets the status code
     pub fn status(&mut self, status_code: StatusCode) -> &mut Self {
         self.status = status_code;
@@ -85,36 +117,34 @@ impl Response {
     }
 
     /// Returns whether the stream has been flushed
-    pub fn sent(&self) -> bool { self.sent }
+    pub fn sent(&self) -> bool {
+        self.sent
+    }
 }
 
 // private methods
 impl Response {
     async fn write(&mut self, res: String) -> Result<()> {
-        self.stream.write(res.as_bytes()).await
-            .map_err(|err| Error::new(&format!("could not write response: {err}")))
-            .trace()?;
+        self.stream.write(res.as_bytes()).await?;
         Ok(())
     }
-    
+
     async fn flush(&mut self) -> Result<()> {
-        self.stream.flush().await
-            .map_err(|err| Error::new(&format!("could not flush response: {err}")))
-            .trace()?;
+        self.stream.flush().await.map_err(|e| ResponseError::Flush(e))?;
         self.sent = true;
         Ok(())
     }
 
     fn fmt_head(&self) -> String {
         let (status_code, status) = self.status.as_tuple();
-    
+
         let mut string_headers = "".to_string();
         for (key, val) in &self.headers {
             string_headers.push_str(format!("\r\n{key}: {val}").as_str());
         }
-        
+
         format!("HTTP/1.1 {status_code} {status}{string_headers}\r\n\r\n")
-      }
+    }
 }
 
 pub trait Sendable {
@@ -127,54 +157,62 @@ pub trait Sendable {
 }
 
 impl Sendable for String {
-    fn prepare(&self, _: &mut Response) { }
+    fn prepare(&self, _: &mut Response) {}
     async fn write(&self, stream: &mut TcpStream) -> Result<()> {
-        stream.write(self.as_bytes()).await
-            .map_err(|err| Error::new(&format!("could not write String response: {err}")))
-            .trace()?;
-
+        let mut bytes = self.as_bytes();
+        while !bytes.is_empty() {
+            let written = stream.write(bytes).await.map_err(|err| ResponseError::Sendable(format!("{err}")))?;
+            bytes = &bytes[written..];
+        }
         Ok(())
     }
-    fn content_length(&self) -> String { self.len().to_string() }
+    fn content_length(&self) -> String {
+        self.len().to_string()
+    }
 }
 
 impl Sendable for &str {
-    fn prepare(&self, _: &mut Response) { }
+    fn prepare(&self, _: &mut Response) {}
     async fn write(&self, stream: &mut TcpStream) -> Result<()> {
-        stream.write(self.as_bytes()).await
-            .map_err(|err| Error::new(&format!("could not write &str response: {err}")))
-            .trace()?;
+        let mut bytes = self.as_bytes();
+        while !bytes.is_empty() {
+            let written = stream.write(bytes).await.map_err(|err| ResponseError::sendable(err))?;
+            bytes = &bytes[written..];
+        }
         Ok(())
     }
-    fn content_length(&self) -> String { self.len().to_string() }
+    fn content_length(&self) -> String {
+        self.len().to_string()
+    }
 }
 
 impl Sendable for &Path {
-    fn prepare(&self, res: &mut Response) { 
+    fn prepare(&self, res: &mut Response) {
         let ext = self.extension().unwrap_or(OsStr::new("")).to_str().unwrap_or("");
         res.content_type(ContentType::from_ext(ext));
     }
 
     async fn write(&self, stream: &mut TcpStream) -> Result<()> {
-        let file = File::open(self).await
-            .map_err(|err| Error::new(&format!("could not open file {}: {}", self.display(), err)))
-            .trace()?;
+        let file = File::open(self)
+            .await
+            .map_err(|err| ResponseError::Sendable(format!("could not open file {}: {}", self.display(), err)))?;
         let mut reader = BufReader::new(file);
         let mut buf = Vec::<u8>::new();
         while let Ok(read) = reader.read_until(b"\n"[0], &mut buf).await {
-            if read == 0 { break; }
-            stream.write(&buf).await
-                .map_err(|err| Error::new(&format!("could not write file response: {err}")))
-                .trace()?;
-            buf = Vec::<u8>::new();
+            if read == 0 {
+                break;
+            }
+            stream.write_all(&buf).await.map_err(|err| ResponseError::sendable(err))?;
+            // buf = Vec::<u8>::new();
+            buf.clear();
         }
         Ok(())
     }
 
-    fn content_length(&self) -> String { 
+    fn content_length(&self) -> String {
         match std::fs::metadata(self) {
             Ok(metadata) => metadata.len().to_string(),
-            Err(_) => "0".into()
+            Err(_) => "0".into(),
         }
     }
 }

@@ -1,25 +1,44 @@
 use std::collections::HashMap;
-use result::*;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use std::net::SocketAddr;
+use std::result::Result as StdResult;
+use thiserror::Error;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::net::TcpStream;
+
+#[derive(Error, Debug)]
+pub enum RequestError {
+    #[error("could not read from TcpStream")]
+    Read(#[from] tokio::io::Error),
+    #[error("invalid Content-Length header `{0}`")]
+    ContentLength(String),
+    #[error("request body is non utf-8")]
+    Utf8(#[from] std::string::FromUtf8Error),
+}
+
+type Result<T> = StdResult<T, RequestError>;
 
 // TODO: query params
 
 #[derive(Debug)]
 pub struct Request {
-  pub method: String,
-  pub path: String,
-  pub headers: HashMap<String, String>,
-  pub cookies: HashMap<String, String>,
-  pub body: String,
-  pub address: SocketAddr
+    pub method: String,
+    pub path: String,
+    pub headers: HashMap<String, String>,
+    pub cookies: HashMap<String, String>,
+    pub body: String,
+    pub address: SocketAddr,
 }
 
 impl Request {
-    pub fn header(&self, key: &str) -> Option<String> { self.headers.get(key).map(|v| v.to_owned()) }
-    pub fn cookie(&self, name: &str) -> Option<&String> { self.cookies.get(name) }
-    pub fn matcher(&self) -> (&str, &str) { (self.method.as_str(), self.path.as_str()) }
+    pub fn header(&self, key: &str) -> Option<String> {
+        self.headers.get(key).map(|v| v.to_owned())
+    }
+    pub fn cookie(&self, name: &str) -> Option<&String> {
+        self.cookies.get(name)
+    }
+    pub fn matcher(&self) -> (&str, &str) {
+        (self.method.as_str(), self.path.as_str())
+    }
 }
 
 impl Request {
@@ -29,7 +48,7 @@ impl Request {
         let mut buf_reader = BufReader::new(stream);
 
         // parsing status line
-        let (_, first_line) = read_line(&mut buf_reader, &mut buf).await.trace()?;
+        let (_, first_line) = read_line(&mut buf_reader, &mut buf).await?;
         let mut status = first_line.split(" ");
         let method = status.next().unwrap_or("GET").to_owned();
         let full_path = status.next().unwrap_or("/").to_owned();
@@ -41,8 +60,10 @@ impl Request {
         // parsing headers
         let mut headers: HashMap<String, String> = HashMap::new();
         loop {
-            let (len, line) = read_line(&mut buf_reader, &mut buf).await.trace()?;
-            if len <= 2 { break }
+            let (len, line) = read_line(&mut buf_reader, &mut buf).await?;
+            if len <= 2 {
+                break;
+            }
             if let Some((k, v)) = line.split_once(": ") {
                 headers.insert(k.to_owned(), v.to_owned());
             }
@@ -61,28 +82,28 @@ impl Request {
         // parsing body
         let mut body: String = "".to_owned();
         if let Some(len) = headers.get("Content-Length") {
-            let len = str::parse::<usize>(len)
-                .map_err(|e| Error::new(&format!("invalid Content-Length header: {e}")))
-                .trace()?;
+            let len = str::parse::<usize>(len).map_err(|_| RequestError::ContentLength(len.into()))?;
 
             let mut buf = vec![0 as u8; len];
-            buf_reader.read_exact(&mut buf).await
-                .map_err(|e| Error::new(&format!("ERROR: could not read request body: {e}")))
-                .trace()?;
+            buf_reader.read_exact(&mut buf).await?;
 
-            body = String::from_utf8(buf)
-                .map_err(|e| Error::new(&format!("ERROR: request body is not utf-8: {e}")))
-                .trace()?;
+            body = String::from_utf8(buf)?;
         }
 
-        Ok(Request { path, method, headers, body, address, cookies })
+        Ok(Self {
+            path,
+            method,
+            headers,
+            body,
+            address,
+            cookies,
+        })
     }
 }
 
 async fn read_line(buf_reader: &mut BufReader<&mut TcpStream>, buf: &mut String) -> Result<(usize, String)> {
-    let len = buf_reader.read_line(buf).await.trace()?;
-    let parsed = String::from_utf8(buf.clone().into()).trace()?
-        .replace("\r\n", ""); // remove line terminators
+    let len = buf_reader.read_line(buf).await?;
+    let parsed = String::from_utf8(buf.clone().into())?.replace("\r\n", ""); // remove line terminators
     buf.clear();
     return Ok((len, parsed));
 }

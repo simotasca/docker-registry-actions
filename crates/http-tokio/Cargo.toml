@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["rt", "net", "io-util"]}
-result = { path = "../result" }
+thiserror = "1.0.67"

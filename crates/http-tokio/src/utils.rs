@@ -1,14 +1,10 @@
-use result::*;
-use tokio::net::TcpListener;
-
 use crate::{request::Request, Response};
 use std::time::SystemTime;
+use tokio::net::TcpListener;
 
-pub async fn accept_connection(server: &TcpListener) -> Result<(Request, Response)> {
-    let (mut stream, addr) = server.accept().await
-        .map_err(|err| { Error::from(format!("couldn't get client: {err}")) })
-        .trace()?;
-    let req = Request::parse((&mut stream, addr)).await.trace()?;
+pub async fn accept_connection(server: &TcpListener) -> Result<(Request, Response), String> {
+    let (mut stream, addr) = server.accept().await.map_err(|err| format!("couldn't get client: {err}"))?;
+    let req = Request::parse((&mut stream, addr)).await.map_err(|err| format!("{err}"))?;
     let res = Response::new(stream);
     Ok((req, res))
 }
@@ -23,7 +19,7 @@ pub fn cors_allow_origin(req: &Request, res: &mut Response, allowed_origins: &[&
     }
 }
 
-pub fn format_request(req: &Request) -> String {
+pub fn print_request(req: &Request) {
     let current_time = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("Time went backwards")
@@ -40,9 +36,5 @@ pub fn format_request(req: &Request) -> String {
     );
 
     let method = format!("[\x1b[96;1m{}\x1b[0m]", req.method);
-    format!("\x1b[2m{}\x1b[0m {: >20} {}", curr_date, method, req.path)
-}
-
-pub fn print_request(req: &Request) {
-    println!("{}", format_request(req));
+    println!("\x1b[2m{}\x1b[0m {: <19} {}", curr_date, method, req.path);
 }

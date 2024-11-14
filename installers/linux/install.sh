@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# REFERENCE:
+# https://abhinand05.medium.com/run-any-executable-as-systemd-service-in-linux-21298674f66f
+
 # Variables (Replace these with your details)
 BINARY_NAME="docker-registry-actions"
 BINARY_URL="https://raw.githubusercontent.com/simotasca/docker-registry-actions/refs/heads/master/installers/linux/docker-registry-actions"

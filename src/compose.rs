@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use anyhow::Context;
 use std::process::Command as SyncCommand;
 use std::process::Stdio;
 use tokio::process::Command;
@@ -19,8 +20,7 @@ impl ComposeCmd {
             .args(self.compose_args())
             .args(&["config"])
             .output()
-            .map_err(|err| Error::new(&format!("failed to load docker configuration: {err}")))
-            .trace()?
+            .context("failed to load docker configuration")?
             .stdout;
         let config_str = String::from_utf8_lossy(&config);
         Ok(config_str.into_owned())
@@ -31,8 +31,7 @@ impl ComposeCmd {
             .args(&["pull", &services.join(" ")])
             .output()
             .await
-            .map_err(|err| Error::new(&format!("failed to pull new docker images: {err}")))
-            .trace()?;
+            .context("failed to pull new docker images")?;
         Ok(())
     }
 
@@ -41,8 +40,7 @@ impl ComposeCmd {
             .args(&["up", &services.join(" "), "-d"])
             .output()
             .await
-            .map_err(|err| Error::new(&format!("failed to pull new docker images: {err}")))
-            .trace()?;
+            .context("failed to pull new docker images")?;
         Ok(())
     }
 
@@ -57,8 +55,7 @@ impl ComposeCmd {
         let out = image_ls_cmd
             .output()
             .await
-            .map_err(|err| Error::new(&format!("failed to list dangling docker images: {err}")))
-            .trace()?;
+            .context("failed to list dangling docker images")?;
         let image_ids = String::from_utf8_lossy(&out.stdout);
         if !image_ids.is_empty() {
             let mut delete_image_cmd = Command::new("docker");
@@ -66,8 +63,7 @@ impl ComposeCmd {
             delete_image_cmd
                 .output()
                 .await
-                .map_err(|err| Error::new(&format!("failed to remove dangling images: {err}")))
-                .trace()?;
+                .context("failed to remove dangling images")?;
         }
         Ok(())
     }

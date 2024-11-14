@@ -1,3 +1,4 @@
+#[derive(Debug, Clone, Copy)]
 pub enum StatusCode {
     /// ##### Information responses
     /// ### 100 Continue

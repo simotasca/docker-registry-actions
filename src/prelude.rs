@@ -1,8 +1,8 @@
-#[allow(unused_imports)]
-pub use result::{Result, Error, ResultExt};
+use anyhow::Error;
+use std::result::Result as StdResult;
 
-#[allow(unused_imports)]
 pub use std::format as f;
 
-#[allow(dead_code)]
 pub struct W<T>(pub T);
+
+pub type Result<T> = StdResult<T, Error>;
