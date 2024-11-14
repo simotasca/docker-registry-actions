@@ -1,0 +1,19 @@
+services:
+  actions:
+    build: .
+    # command: ["-t"]
+    ports: 
+      - "8888:8080"
+    privileged: true
+    dns: 
+      - 8.8.8.8
+    volumes:
+      - ./:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config.demo.yml:/etc/docker-registry-actions/config.yml
+
+  curl:
+    image: curlimages/curl
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["curl", "-v", "host.docker.internal:8080", "-d", "passo un body"]
