@@ -38,7 +38,7 @@ impl ComposeCmd {
 
     pub async fn restart_services(&self, services: &Vec<String>) -> Result<()> {
         self.compose_cmd()
-            .args(&["restart", &services.join(" ")])
+            .args(&["up", &services.join(" "), "-d"])
             .output()
             .await
             .map_err(|err| Error::new(&format!("failed to pull new docker images: {err}")))

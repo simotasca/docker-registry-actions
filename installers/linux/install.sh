@@ -53,4 +53,4 @@ sudo systemctl start $SERVICE_NAME
 # Confirm the service is running
 sudo systemctl status $SERVICE_NAME
 
-echo "Modify the configuration by editing /etc/systemd/system/$SERVICE_NAME.service"
+echo "Modify the configuration by editing $CONFIG_FILE"
