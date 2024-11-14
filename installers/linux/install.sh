@@ -2,7 +2,7 @@
 
 # Variables (Replace these with your details)
 BINARY_NAME="docker-registry-actions"
-BINARY_URL="https://github.com/simotasca/docker-registry-actions/releases/download/v0.2.0/docker-registry-actions"
+BINARY_URL="https://raw.githubusercontent.com/simotasca/docker-registry-actions/refs/heads/master/installers/linux/docker-registry-actions"
 SERVICE_NAME="docker-registry-actions"
 CONFIG_DIR="/etc/$SERVICE_NAME"
 CONFIG_FILE="$CONFIG_DIR/config.yml"
@@ -11,6 +11,7 @@ CONFIG_FILE="$CONFIG_DIR/config.yml"
 # Download and install the binary
 sudo wget -O /usr/local/bin/$BINARY_NAME $BINARY_URL
 sudo chmod +x /usr/local/bin/$BINARY_NAME
+
 
 # Create a basic configuration file
 sudo mkdir $CONFIG_DIR
